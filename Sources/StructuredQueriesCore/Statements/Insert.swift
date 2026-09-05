@@ -719,6 +719,49 @@ extension PrimaryKeyedTable {
       }
     )
   }
+
+  /// An upsert statement for given drafts, applied only where a condition holds.
+  ///
+  /// The same as ``upsert(values:)`` — every writable column is copied from the excluded row —
+  /// but the update is filtered. A row that fails the condition is left as it is: the insert
+  /// conflicts, the update does not apply, and the statement affects nothing.
+  ///
+  /// This is useful when rows can arrive more than once and the newest should win regardless of
+  /// the order they are written in:
+  ///
+  /// ```swift
+  /// Reminder.upsert {
+  ///   draft
+  /// } where: { existing, excluded in
+  ///   excluded.updatedAt > existing.updatedAt
+  /// }
+  /// // INSERT INTO "reminders" ("id", …)
+  /// // VALUES (1, …)
+  /// // ON CONFLICT DO UPDATE SET "…" = "excluded"."…", …
+  /// // WHERE "excluded"."updatedAt" > "reminders"."updatedAt"
+  /// ```
+  ///
+  /// - Parameters:
+  ///   - values: A builder of row values for the given columns.
+  ///   - updateFilter: A filter to apply to the update clause.
+  /// - Returns: An insert statement with a conditional upsert clause.
+  public static func upsert<UpdateFilter: QueryExpression>(
+    @InsertValuesBuilder<Self> values: () -> [[QueryFragment]],
+    where updateFilter: (TableColumns, Excluded) -> UpdateFilter
+  ) -> InsertOf<Self> where UpdateFilter.QueryValue == Bool {
+    insert(
+      values: values,
+      onConflict: { $0.primaryKey },
+      where: { _ in nil },
+      doUpdate: { updates, _ in
+        for (column, excluded) in zip(Draft.TableColumns.writableColumns, Excluded.writableColumns)
+        where !columns.primaryKey._names.contains(column.name) {
+          updates.set(column, excluded.queryFragment)
+        }
+      },
+      where: { updateFilter($0, $1) }
+    )
+  }
 }
 
 private enum InsertValues {
