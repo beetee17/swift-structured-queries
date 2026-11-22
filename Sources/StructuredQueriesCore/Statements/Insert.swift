@@ -746,7 +746,7 @@ extension PrimaryKeyedTable {
   ///   - updateFilter: A filter to apply to the update clause.
   /// - Returns: An insert statement with a conditional upsert clause.
   public static func upsert<UpdateFilter: QueryExpression>(
-    @InsertValuesBuilder<Self> values: () -> [[QueryFragment]],
+    @InsertValuesBuilder<Self> values: () -> ValuesRows<Self>,
     where updateFilter: (TableColumns, Excluded) -> UpdateFilter
   ) -> InsertOf<Self> where UpdateFilter.QueryValue == Bool {
     insert(
